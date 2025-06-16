@@ -33,12 +33,31 @@ y = df['is_returned']
 # Train-test split
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
+X_test_raw = X_test.copy()
 # Train XGBoost model
 xgb_model = XGBClassifier(eval_metric='logloss', random_state=42)
 xgb_model.fit(X_train, y_train)
 
 # Predict
 y_pred = xgb_model.predict(X_test)
+y_proba = xgb_model.predict_proba(X_test)[:, 1] 
+X_test = X_test.copy()
+X_test['predicted'] = y_pred
+X_test['proba'] = y_proba  # Xác suất trả hàng
+def categorize_risk(prob):
+    if prob > 0.8:
+        return 'High Risk'
+    elif prob > 0.6:
+        return 'Medium Risk'
+    else:
+        return 'Low Risk'
+X_test['risk_group'] = X_test['proba'].apply(categorize_risk)
+print("Number of customers in each risk group:")
+print(X_test['risk_group'].value_counts())
+#top 10 customers with highest risk
+print("\nTop 10 customers with highest risk of returning products:")
+top_risk_customers = X_test.nlargest(10, 'proba')[['predicted', 'proba', 'risk_group']]
+print(top_risk_customers)
 
 #classification report
 print("Classification Report:")
@@ -59,11 +78,11 @@ plt.show()
 
 
 # SHAP values
-explainer = shap.Explainer(xgb_model, X_train)
-shap_values = explainer(X_test)
+explainer = shap.TreeExplainer(xgb_model)
+shap_values = explainer.shap_values(X_test_raw)
 
 # SHAP summary plot
-shap.summary_plot(shap_values, X_test, show=False)
+shap.summary_plot(shap_values, X_test_raw, show=False)
 plt.tight_layout()
 plt.savefig(r'C:\Users\Windows\Downloads\shap_summary_plot.png')
 plt.show()
@@ -103,4 +122,14 @@ plt.xlabel("Metric")
 plt.ylabel("Class / Average")
 plt.tight_layout()
 plt.savefig(r"C:\Users\Windows\Downloads\classification_report_heatmap_full.png")
+plt.show()
+#customer segmentation
+# Customer segmentation based on risk group
+plt.figure(figsize=(6, 4))
+sns.barplot(data=X_test, x='risk_group', y='satisfaction', palette='Set2')
+plt.title("Customer Segmentation by Risk Group")
+plt.xlabel("Risk Group")
+plt.ylabel("Satisfaction")
+plt.tight_layout()
+plt.savefig(r'C:\Users\Windows\Downloads\customer_segmentation_risk_group.png')
 plt.show()
